@@ -124,11 +124,15 @@ func (c codec) String() string {
 	return fmt.Sprintf("nm: %v, df: %v, ef: %v", c.nm, c.df, c.ef)
 }
 
-type symtab map[string]*codec // map full name to codec
+type Symtab map[string]*codec // map full name to codec
+
+func NewSymtab() Symtab {
+	return make(Symtab)
+}
 
 // NewCodec creates a new object that supports both the Decode and
 // Encode methods. It requires an Avro schema, expressed as a JSON
-// string.
+// string. The codec is created in a new Symtab.
 //
 //   codec, err := goavro.NewCodec(someJSONSchema)
 //   if err != nil {
@@ -166,6 +170,12 @@ type symtab map[string]*codec // map full name to codec
 //       return nil, err
 //   }
 func NewCodec(someJSONSchema string, setters ...CodecSetter) (Codec, error) {
+	st := NewSymtab()
+	return st.NewCodec(someJSONSchema, setters...)
+}
+
+// Create the codec in the specified Symtab
+func (st Symtab) NewCodec(someJSONSchema string, setters ...CodecSetter) (Codec, error) {
 	// unmarshal into schema blob
 	var schema interface{}
 	if err := json.Unmarshal([]byte(someJSONSchema), &schema); err != nil {
@@ -176,10 +186,6 @@ func NewCodec(someJSONSchema string, setters ...CodecSetter) (Codec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot marshal schema: %v", err)
 	}
-
-	// each codec gets a unified namespace of symbols to
-	// respective codecs
-	st := make(symtab)
 
 	newCodec, err := st.buildCodec(nullNamespace, schema)
 	if err != nil {
@@ -255,7 +261,7 @@ func init() {
 	stringCodec = &codec{nm: &name{n: "string"}, df: stringDecoder, ef: stringEncoder}
 }
 
-func (st symtab) buildCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
+func (st Symtab) buildCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
 	switch schemaType := schema.(type) {
 	case string:
 		return st.buildString(enclosingNamespace, schemaType, schema)
@@ -268,7 +274,7 @@ func (st symtab) buildCodec(enclosingNamespace string, schema interface{}) (*cod
 	}
 }
 
-func (st symtab) buildMap(enclosingNamespace string, schema map[string]interface{}) (*codec, error) {
+func (st Symtab) buildMap(enclosingNamespace string, schema map[string]interface{}) (*codec, error) {
 	t, ok := schema["type"]
 	if !ok {
 		return nil, newCodecBuildError("map", "ought have type: %v", schema)
@@ -287,7 +293,7 @@ func (st symtab) buildMap(enclosingNamespace string, schema map[string]interface
 	}
 }
 
-func (st symtab) buildString(enclosingNamespace, typeName string, schema interface{}) (*codec, error) {
+func (st Symtab) buildString(enclosingNamespace, typeName string, schema interface{}) (*codec, error) {
 	switch typeName {
 	case "null":
 		return nullCodec, nil
@@ -333,7 +339,7 @@ type unionEncoder struct {
 	index int32
 }
 
-func (st symtab) makeUnionCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
+func (st Symtab) makeUnionCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
 	errorNamespace := "null namespace"
 	if enclosingNamespace != nullNamespace {
 		errorNamespace = enclosingNamespace
@@ -418,7 +424,7 @@ func (st symtab) makeUnionCodec(enclosingNamespace string, schema interface{}) (
 	}, nil
 }
 
-func (st symtab) makeEnumCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
+func (st Symtab) makeEnumCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
 	errorNamespace := "null namespace"
 	if enclosingNamespace != nullNamespace {
 		errorNamespace = enclosingNamespace
@@ -486,7 +492,7 @@ func (st symtab) makeEnumCodec(enclosingNamespace string, schema interface{}) (*
 	return c, nil
 }
 
-func (st symtab) makeFixedCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
+func (st Symtab) makeFixedCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
 	errorNamespace := "null namespace"
 	if enclosingNamespace != nullNamespace {
 		errorNamespace = enclosingNamespace
@@ -547,7 +553,7 @@ func (st symtab) makeFixedCodec(enclosingNamespace string, schema interface{}) (
 	return c, nil
 }
 
-func (st symtab) makeRecordCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
+func (st Symtab) makeRecordCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
 	errorNamespace := "null namespace"
 	if enclosingNamespace != nullNamespace {
 		errorNamespace = enclosingNamespace
@@ -614,7 +620,7 @@ func (st symtab) makeRecordCodec(enclosingNamespace string, schema interface{}) 
 	return c, nil
 }
 
-func (st symtab) makeMapCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
+func (st Symtab) makeMapCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
 	errorNamespace := "null namespace"
 	if enclosingNamespace != nullNamespace {
 		errorNamespace = enclosingNamespace
@@ -704,7 +710,7 @@ func (st symtab) makeMapCodec(enclosingNamespace string, schema interface{}) (*c
 	}, nil
 }
 
-func (st symtab) makeArrayCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
+func (st Symtab) makeArrayCodec(enclosingNamespace string, schema interface{}) (*codec, error) {
 	errorNamespace := "null namespace"
 	if enclosingNamespace != nullNamespace {
 		errorNamespace = enclosingNamespace
